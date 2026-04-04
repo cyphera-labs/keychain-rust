@@ -15,11 +15,21 @@ pub enum KeychainError {
     Encoding(String),
 }
 
-/// Resolved key material
+/// Resolved key material + settings
 #[derive(Debug, Clone)]
 pub struct ResolvedKey {
     pub uri: String,
     pub material: Vec<u8>,
+    pub metadata: HashMap<String, String>,
+}
+
+/// Full key configuration — URI + all settings needed for use
+#[derive(Debug, Clone)]
+pub struct KeyConfig {
+    pub uri: String,
+    pub tweak: Option<Vec<u8>>,
+    pub algorithm: Option<String>,
+    pub version: Option<u32>,
     pub metadata: HashMap<String, String>,
 }
 
@@ -33,10 +43,23 @@ pub trait KeyBackend: Send + Sync {
     fn resolve(&self, path: &str) -> Result<ResolvedKey, KeychainError>;
 }
 
-/// Universal key store. Register backends, resolve URIs or named aliases.
+/// Resolved key with full settings from the key config
+#[derive(Debug, Clone)]
+pub struct FullResolvedKey {
+    pub name: String,
+    pub uri: String,
+    pub material: Vec<u8>,
+    pub tweak: Option<Vec<u8>>,
+    pub algorithm: Option<String>,
+    pub version: Option<u32>,
+    pub metadata: HashMap<String, String>,
+}
+
+/// Universal key store. Register backends, resolve URIs or named key configs.
 pub struct KeyStore {
     backends: HashMap<String, Box<dyn KeyBackend>>,
     aliases: HashMap<String, String>,
+    configs: HashMap<String, KeyConfig>,
 }
 
 impl KeyStore {
@@ -44,6 +67,7 @@ impl KeyStore {
         Self {
             backends: HashMap::new(),
             aliases: HashMap::new(),
+            configs: HashMap::new(),
         }
     }
 
@@ -54,51 +78,97 @@ impl KeyStore {
         self
     }
 
-    /// Register a named alias that maps to a URI.
+    /// Register a simple alias: name → URI (no extra settings)
     ///
     /// ```ignore
     /// store.alias("customer-east", "aws-kms://arn:aws:kms:us-east-1:123:key/ssn");
-    /// store.resolve("customer-east")?; // resolves via AWS KMS
     /// ```
     pub fn alias(mut self, name: &str, uri: &str) -> Self {
         self.aliases.insert(name.to_string(), uri.to_string());
         self
     }
 
-    /// Load aliases from a HashMap (e.g., parsed from YAML/JSON)
+    /// Load simple aliases from a HashMap
     pub fn aliases(mut self, map: HashMap<String, String>) -> Self {
         self.aliases.extend(map);
         self
     }
 
-    /// Resolve a name or URI to key material.
+    /// Register a full key config: name → URI + tweak + algorithm + version + metadata
     ///
-    /// If the input contains `://`, it's treated as a URI.
-    /// Otherwise, it's looked up as an alias first.
-    ///
-    /// Examples:
-    /// - `"customer-east"` → alias lookup → `"aws-kms://..."` → AWS KMS
-    /// - `"env://MY_KEY"` → direct URI → env backend
+    /// ```ignore
+    /// store.key("prod-east", KeyConfig {
+    ///     uri: "aws-kms://arn:aws:kms:us-east-1:123:key/ssn".into(),
+    ///     tweak: Some(hex::decode("d8e7920afa330a73").unwrap()),
+    ///     algorithm: Some("aes-256".into()),
+    ///     version: Some(2),
+    ///     metadata: HashMap::new(),
+    /// });
+    /// ```
+    pub fn key(mut self, name: &str, config: KeyConfig) -> Self {
+        self.configs.insert(name.to_string(), config);
+        self
+    }
+
+    /// Load multiple key configs
+    pub fn keys(mut self, configs: HashMap<String, KeyConfig>) -> Self {
+        self.configs.extend(configs);
+        self
+    }
+
+    /// Resolve a name or URI to key material (simple — no key config settings)
     pub fn resolve(&self, name_or_uri: &str) -> Result<ResolvedKey, KeychainError> {
-        // If it looks like a URI, resolve directly
-        let uri = if name_or_uri.contains("://") {
-            name_or_uri.to_string()
-        } else {
-            // Look up alias
-            self.aliases.get(name_or_uri)
-                .cloned()
-                .ok_or_else(|| KeychainError::NotFound(
-                    format!("no alias or URI found for '{name_or_uri}'")
-                ))?
-        };
-
+        let uri = self.resolve_uri(name_or_uri)?;
         let (scheme, path) = parse_uri(&uri)?;
-
         let backend = self.backends.get(&scheme).ok_or_else(|| {
             KeychainError::UnknownScheme(scheme.clone())
         })?;
-
         backend.resolve(&path)
+    }
+
+    /// Resolve a name to key material + full settings from key config.
+    /// Falls back to simple alias or direct URI if no config found.
+    pub fn resolve_full(&self, name_or_uri: &str) -> Result<FullResolvedKey, KeychainError> {
+        // Check key configs first
+        if let Some(config) = self.configs.get(name_or_uri) {
+            let (scheme, path) = parse_uri(&config.uri)?;
+            let backend = self.backends.get(&scheme).ok_or_else(|| {
+                KeychainError::UnknownScheme(scheme.clone())
+            })?;
+            let resolved = backend.resolve(&path)?;
+
+            return Ok(FullResolvedKey {
+                name: name_or_uri.to_string(),
+                uri: config.uri.clone(),
+                material: resolved.material,
+                tweak: config.tweak.clone(),
+                algorithm: config.algorithm.clone(),
+                version: config.version,
+                metadata: {
+                    let mut m = resolved.metadata;
+                    m.extend(config.metadata.clone());
+                    m
+                },
+            });
+        }
+
+        // Fall back to simple resolve
+        let uri = self.resolve_uri(name_or_uri)?;
+        let (scheme, path) = parse_uri(&uri)?;
+        let backend = self.backends.get(&scheme).ok_or_else(|| {
+            KeychainError::UnknownScheme(scheme.clone())
+        })?;
+        let resolved = backend.resolve(&path)?;
+
+        Ok(FullResolvedKey {
+            name: name_or_uri.to_string(),
+            uri,
+            material: resolved.material,
+            tweak: None,
+            algorithm: None,
+            version: None,
+            metadata: resolved.metadata,
+        })
     }
 
     /// List registered schemes
@@ -109,6 +179,27 @@ impl KeyStore {
     /// List registered aliases
     pub fn alias_names(&self) -> Vec<&str> {
         self.aliases.keys().map(|s| s.as_str()).collect()
+    }
+
+    /// List registered key configs
+    pub fn key_names(&self) -> Vec<&str> {
+        self.configs.keys().map(|s| s.as_str()).collect()
+    }
+
+    // ── Internal ────────────────────────────────────────────────────────
+
+    fn resolve_uri(&self, name_or_uri: &str) -> Result<String, KeychainError> {
+        if name_or_uri.contains("://") {
+            Ok(name_or_uri.to_string())
+        } else if let Some(config) = self.configs.get(name_or_uri) {
+            Ok(config.uri.clone())
+        } else if let Some(uri) = self.aliases.get(name_or_uri) {
+            Ok(uri.clone())
+        } else {
+            Err(KeychainError::NotFound(
+                format!("no key config, alias, or URI found for '{name_or_uri}'")
+            ))
+        }
     }
 }
 
@@ -251,6 +342,59 @@ mod tests {
         assert!(store.resolve("west").is_ok());
         assert!(store.resolve("eu").is_ok());
         assert_eq!(store.alias_names().len(), 3);
+    }
+
+    #[test]
+    fn test_key_config_full_resolve() {
+        let store = KeyStore::new()
+            .register(Box::new(DummyBackend))
+            .key("prod-east", KeyConfig {
+                uri: "dummy://east-key".into(),
+                tweak: Some(vec![0xD8, 0xE7, 0x92, 0x0A, 0xFA, 0x33, 0x0A, 0x73]),
+                algorithm: Some("aes-256".into()),
+                version: Some(2),
+                metadata: HashMap::from([("region".into(), "us-east-1".into())]),
+            });
+
+        let key = store.resolve_full("prod-east").unwrap();
+        assert_eq!(key.name, "prod-east");
+        assert_eq!(key.material.len(), 32);
+        assert_eq!(key.tweak, Some(vec![0xD8, 0xE7, 0x92, 0x0A, 0xFA, 0x33, 0x0A, 0x73]));
+        assert_eq!(key.algorithm, Some("aes-256".into()));
+        assert_eq!(key.version, Some(2));
+        assert_eq!(key.metadata.get("region"), Some(&"us-east-1".to_string()));
+    }
+
+    #[test]
+    fn test_key_config_fallback_to_alias() {
+        let store = KeyStore::new()
+            .register(Box::new(DummyBackend))
+            .alias("simple", "dummy://simple-key");
+
+        // No key config for "simple", but there's an alias
+        let key = store.resolve_full("simple").unwrap();
+        assert_eq!(key.name, "simple");
+        assert!(key.tweak.is_none()); // no config, no tweak
+        assert!(key.algorithm.is_none());
+    }
+
+    #[test]
+    fn test_key_config_takes_priority_over_alias() {
+        let store = KeyStore::new()
+            .register(Box::new(DummyBackend))
+            .alias("mykey", "dummy://alias-path")
+            .key("mykey", KeyConfig {
+                uri: "dummy://config-path".into(),
+                tweak: Some(vec![1, 2, 3, 4, 5, 6, 7, 8]),
+                algorithm: None,
+                version: None,
+                metadata: HashMap::new(),
+            });
+
+        // Key config should win over alias
+        let key = store.resolve_full("mykey").unwrap();
+        assert_eq!(key.uri, "dummy://config-path");
+        assert!(key.tweak.is_some());
     }
 
     #[test]
