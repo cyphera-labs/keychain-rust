@@ -1,0 +1,12 @@
+[package]
+name = "keychain"
+description = "Universal key resolution — one API, every key store"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+thiserror = { workspace = true }
+hex = { workspace = true }
+base64 = { workspace = true }

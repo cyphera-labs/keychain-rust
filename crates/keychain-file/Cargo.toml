@@ -1,0 +1,12 @@
+[package]
+name = "keychain-file"
+description = "File-based backend for keychain"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+keychain = { path = "../keychain" }
+hex = { workspace = true }
+base64 = { workspace = true }

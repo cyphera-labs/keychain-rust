@@ -1,0 +1,12 @@
+[package]
+name = "keychain-gcp"
+description = "GCP Cloud KMS backend for keychain"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+keychain = { path = "../keychain" }
+thiserror = { workspace = true }
+# google-cloud-kms = "0.4"  # TODO

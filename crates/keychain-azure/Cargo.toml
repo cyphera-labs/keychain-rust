@@ -1,0 +1,12 @@
+[package]
+name = "keychain-azure"
+description = "Azure Key Vault backend for keychain"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+keychain = { path = "../keychain" }
+thiserror = { workspace = true }
+# azure_security_keyvault_keys = "0.20"  # TODO
