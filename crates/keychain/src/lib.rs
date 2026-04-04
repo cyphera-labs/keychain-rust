@@ -33,15 +33,17 @@ pub trait KeyBackend: Send + Sync {
     fn resolve(&self, path: &str) -> Result<ResolvedKey, KeychainError>;
 }
 
-/// Universal key store. Register backends, resolve URIs.
+/// Universal key store. Register backends, resolve URIs or named aliases.
 pub struct KeyStore {
     backends: HashMap<String, Box<dyn KeyBackend>>,
+    aliases: HashMap<String, String>,
 }
 
 impl KeyStore {
     pub fn new() -> Self {
         Self {
             backends: HashMap::new(),
+            aliases: HashMap::new(),
         }
     }
 
@@ -52,20 +54,45 @@ impl KeyStore {
         self
     }
 
-    /// Resolve a URI to key material.
+    /// Register a named alias that maps to a URI.
     ///
-    /// URI format: `scheme://path`
+    /// ```ignore
+    /// store.alias("customer-east", "aws-kms://arn:aws:kms:us-east-1:123:key/ssn");
+    /// store.resolve("customer-east")?; // resolves via AWS KMS
+    /// ```
+    pub fn alias(mut self, name: &str, uri: &str) -> Self {
+        self.aliases.insert(name.to_string(), uri.to_string());
+        self
+    }
+
+    /// Load aliases from a HashMap (e.g., parsed from YAML/JSON)
+    pub fn aliases(mut self, map: HashMap<String, String>) -> Self {
+        self.aliases.extend(map);
+        self
+    }
+
+    /// Resolve a name or URI to key material.
+    ///
+    /// If the input contains `://`, it's treated as a URI.
+    /// Otherwise, it's looked up as an alias first.
     ///
     /// Examples:
-    /// - `env://MY_SECRET_KEY`
-    /// - `file://./keys/dev.key`
-    /// - `file://./keys/dev.hex` (hex-encoded)
-    /// - `aws-kms://arn:aws:kms:us-east-1:123:key/abc`
-    /// - `vault://transit/keys/my-key`
-    /// - `gcp-kms://projects/p/locations/l/keyRings/r/cryptoKeys/k`
-    /// - `azure-kv://my-vault/keys/my-key`
-    pub fn resolve(&self, uri: &str) -> Result<ResolvedKey, KeychainError> {
-        let (scheme, path) = parse_uri(uri)?;
+    /// - `"customer-east"` → alias lookup → `"aws-kms://..."` → AWS KMS
+    /// - `"env://MY_KEY"` → direct URI → env backend
+    pub fn resolve(&self, name_or_uri: &str) -> Result<ResolvedKey, KeychainError> {
+        // If it looks like a URI, resolve directly
+        let uri = if name_or_uri.contains("://") {
+            name_or_uri.to_string()
+        } else {
+            // Look up alias
+            self.aliases.get(name_or_uri)
+                .cloned()
+                .ok_or_else(|| KeychainError::NotFound(
+                    format!("no alias or URI found for '{name_or_uri}'")
+                ))?
+        };
+
+        let (scheme, path) = parse_uri(&uri)?;
 
         let backend = self.backends.get(&scheme).ok_or_else(|| {
             KeychainError::UnknownScheme(scheme.clone())
@@ -77,6 +104,11 @@ impl KeyStore {
     /// List registered schemes
     pub fn schemes(&self) -> Vec<&str> {
         self.backends.keys().map(|s| s.as_str()).collect()
+    }
+
+    /// List registered aliases
+    pub fn alias_names(&self) -> Vec<&str> {
+        self.aliases.keys().map(|s| s.as_str()).collect()
     }
 }
 
@@ -174,6 +206,65 @@ mod tests {
     fn test_unknown_scheme() {
         let store = KeyStore::new();
         assert!(store.resolve("nope://key").is_err());
+    }
+
+    #[test]
+    fn test_alias_resolves_to_backend() {
+        let store = KeyStore::new()
+            .register(Box::new(DummyBackend))
+            .alias("my-key", "dummy://actual-key-path");
+
+        let key = store.resolve("my-key").unwrap();
+        assert_eq!(key.material.len(), 32);
+        assert_eq!(key.uri, "dummy://actual-key-path");
+    }
+
+    #[test]
+    fn test_alias_not_found() {
+        let store = KeyStore::new()
+            .register(Box::new(DummyBackend));
+
+        // No alias registered, and it doesn't look like a URI
+        assert!(store.resolve("nonexistent").is_err());
+    }
+
+    #[test]
+    fn test_uri_bypasses_alias() {
+        let store = KeyStore::new()
+            .register(Box::new(DummyBackend))
+            .alias("my-key", "dummy://aliased-path");
+
+        // Direct URI should bypass alias lookup
+        let key = store.resolve("dummy://direct-path").unwrap();
+        assert_eq!(key.uri, "dummy://direct-path");
+    }
+
+    #[test]
+    fn test_multiple_aliases() {
+        let store = KeyStore::new()
+            .register(Box::new(DummyBackend))
+            .alias("east", "dummy://us-east-key")
+            .alias("west", "dummy://us-west-key")
+            .alias("eu", "dummy://eu-key");
+
+        assert!(store.resolve("east").is_ok());
+        assert!(store.resolve("west").is_ok());
+        assert!(store.resolve("eu").is_ok());
+        assert_eq!(store.alias_names().len(), 3);
+    }
+
+    #[test]
+    fn test_aliases_from_hashmap() {
+        let mut map = HashMap::new();
+        map.insert("prod".to_string(), "dummy://prod-key".to_string());
+        map.insert("staging".to_string(), "dummy://staging-key".to_string());
+
+        let store = KeyStore::new()
+            .register(Box::new(DummyBackend))
+            .aliases(map);
+
+        assert!(store.resolve("prod").is_ok());
+        assert!(store.resolve("staging").is_ok());
     }
 
     #[test]
