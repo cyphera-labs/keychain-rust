@@ -7,11 +7,39 @@ on:
     branches: [main]
 
 jobs:
-  test:
+  unit:
+    name: Unit Tests
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - name: Build
-        run: cargo build --workspace
-      - name: Test
-        run: cargo test --workspace
+      - run: cargo build --workspace
+      - run: cargo test --workspace
+
+  integration:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    services:
+      vault:
+        image: hashicorp/vault:1.18
+        ports: ["8200:8200"]
+        env:
+          VAULT_DEV_ROOT_TOKEN_ID: root
+          VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
+        options: >-
+          --cap-add IPC_LOCK
+          --health-cmd "vault status"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 15
+    steps:
+      - uses: actions/checkout@v6
+      - name: Seed Vault
+        run: |
+          curl -sf -X POST http://localhost:8200/v1/secret/data/test-key \
+            -H "X-Vault-Token: root" \
+            -H "Content-Type: application/json" \
+            -d '{"data":{"material":"2B7E151628AED2A6ABF7158809CF4F3C","version":1,"status":"active"}}'
+      - run: cargo test --workspace
+        env:
+          VAULT_ADDR: http://localhost:8200
+          VAULT_TOKEN: root
