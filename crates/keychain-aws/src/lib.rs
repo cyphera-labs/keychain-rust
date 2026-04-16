@@ -120,22 +120,14 @@ impl KeyBackend for AwsKmsBackend {
         // TODO: Add SigV4 signing for real AWS endpoints.
         // LocalStack and local proxies work without signing.
         let resp = ureq::post(&url)
-            .set("Content-Type", "application/x-amz-json-1.1")
-            .set("X-Amz-Target", "TrentService.GenerateDataKey")
+            .header("Content-Type", "application/x-amz-json-1.1")
+            .header("X-Amz-Target", "TrentService.GenerateDataKey")
             .send_json(&body)
-            .map_err(|e| match e {
-                ureq::Error::Status(code, resp) => {
-                    let body = resp.into_string().unwrap_or_default();
-                    KeychainError::Backend(format!(
-                        "AWS KMS GenerateDataKey failed (HTTP {}): {}",
-                        code, body
-                    ))
-                }
-                _ => KeychainError::Backend(format!("AWS KMS request failed: {}", e)),
-            })?;
+            .map_err(|e| KeychainError::Backend(format!("AWS KMS request failed: {}", e)))?;
 
-        let kms_resp: GenerateDataKeyResponse = resp
-            .into_json()
+        let body_str = resp.into_body().read_to_string()
+            .map_err(|e| KeychainError::Backend(format!("Failed to read KMS response: {}", e)))?;
+        let kms_resp: GenerateDataKeyResponse = serde_json::from_str(&body_str)
             .map_err(|e| KeychainError::Backend(format!("Failed to parse KMS response: {}", e)))?;
 
         use base64::Engine;

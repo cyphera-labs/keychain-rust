@@ -106,25 +106,15 @@ impl KeyBackend for AzureKeyVaultBackend {
         });
 
         let resp = ureq::post(&url)
-            .set("Authorization", &format!("Bearer {}", token))
-            .set("Content-Type", "application/json")
+            .header("Authorization", &format!("Bearer {}", token))
+            .header("Content-Type", "application/json")
             .send_json(&body)
-            .map_err(|e| match e {
-                ureq::Error::Status(code, resp) => {
-                    let body = resp.into_string().unwrap_or_default();
-                    KeychainError::Backend(format!(
-                        "Azure Key Vault wrapKey failed (HTTP {}): {}",
-                        code, body
-                    ))
-                }
-                _ => KeychainError::Backend(format!("Azure Key Vault request failed: {}", e)),
-            })?;
+            .map_err(|e| KeychainError::Backend(format!("Azure Key Vault request failed: {}", e)))?;
 
-        let wrap_resp: WrapKeyResponse = resp
-            .into_json()
-            .map_err(|e| {
-                KeychainError::Backend(format!("Failed to parse Azure KV response: {}", e))
-            })?;
+        let body_str = resp.into_body().read_to_string()
+            .map_err(|e| KeychainError::Backend(format!("Failed to read Azure KV response: {}", e)))?;
+        let wrap_resp: WrapKeyResponse = serde_json::from_str(&body_str)
+            .map_err(|e| KeychainError::Backend(format!("Failed to parse Azure KV response: {}", e)))?;
 
         let mut metadata = HashMap::new();
         metadata.insert("wrapped_key".to_string(), wrap_resp.value);

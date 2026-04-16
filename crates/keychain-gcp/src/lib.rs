@@ -90,22 +90,14 @@ impl KeyBackend for GcpKmsBackend {
         });
 
         let resp = ureq::post(&url)
-            .set("Authorization", &format!("Bearer {}", token))
-            .set("Content-Type", "application/json")
+            .header("Authorization", &format!("Bearer {}", token))
+            .header("Content-Type", "application/json")
             .send_json(&body)
-            .map_err(|e| match e {
-                ureq::Error::Status(code, resp) => {
-                    let body = resp.into_string().unwrap_or_default();
-                    KeychainError::Backend(format!(
-                        "GCP KMS encrypt failed (HTTP {}): {}",
-                        code, body
-                    ))
-                }
-                _ => KeychainError::Backend(format!("GCP KMS request failed: {}", e)),
-            })?;
+            .map_err(|e| KeychainError::Backend(format!("GCP KMS request failed: {}", e)))?;
 
-        let encrypt_resp: EncryptResponse = resp
-            .into_json()
+        let body_str = resp.into_body().read_to_string()
+            .map_err(|e| KeychainError::Backend(format!("Failed to read GCP KMS response: {}", e)))?;
+        let encrypt_resp: EncryptResponse = serde_json::from_str(&body_str)
             .map_err(|e| KeychainError::Backend(format!("Failed to parse GCP KMS response: {}", e)))?;
 
         let mut metadata = HashMap::new();

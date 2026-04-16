@@ -47,14 +47,17 @@ impl KeyBackend for VaultKvBackend {
         let url = format!("{}/v1/{}/data/{}", self.address, self.mount, path);
 
         let resp = ureq::get(&url)
-            .set("X-Vault-Token", &self.token)
+            .header("X-Vault-Token", &self.token)
             .call()
-            .map_err(|e| match e {
-                ureq::Error::Status(404, _) => KeychainError::NotFound(format!("vault://{}", path)),
-                _ => KeychainError::Backend(format!("Vault request failed: {}", e)),
-            })?;
+            .map_err(|e| KeychainError::Backend(format!("Vault request failed: {}", e)))?;
 
-        let vault_resp: VaultResponse = resp.into_json()
+        if resp.status() == 404 {
+            return Err(KeychainError::NotFound(format!("vault://{}", path)));
+        }
+
+        let body = resp.into_body().read_to_string()
+            .map_err(|e| KeychainError::Backend(format!("Failed to read Vault response: {}", e)))?;
+        let vault_resp: VaultResponse = serde_json::from_str(&body)
             .map_err(|e| KeychainError::Backend(format!("Failed to parse Vault response: {}", e)))?;
 
         let material_str = vault_resp.data.data.get("material")
