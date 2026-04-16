@@ -1,5 +1,8 @@
 # keychain
 
+[![CI](https://github.com/cyphera-labs/keychain-rust/actions/workflows/ci.yml/badge.svg)](https://github.com/cyphera-labs/keychain-rust/actions/workflows/ci.yml)
+[![Security](https://github.com/cyphera-labs/keychain-rust/actions/workflows/codeql.yml/badge.svg)](https://github.com/cyphera-labs/keychain-rust/actions/workflows/codeql.yml)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 Universal key resolution. One API, every key store.
 
 ```rust
