@@ -19,16 +19,27 @@ jobs:
     name: Integration Tests
     runs-on: ubuntu-latest
     services:
+      localstack:
+        image: localstack/localstack:3
+        ports:
+          - 4566:4566
+        env:
+          SERVICES: kms
+        options: >-
+          --health-cmd "curl -sf http://localhost:4566/_localstack/health"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 15
       vault:
         image: hashicorp/vault:latest
-        ports: ["8200:8200"]
+        ports:
+          - 8200:8200
         env:
           VAULT_DEV_ROOT_TOKEN_ID: root
           VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
           SKIP_SETCAP: "true"
           VAULT_ADDR: http://127.0.0.1:8200
         options: >-
-          
           --health-cmd "vault status"
           --health-interval 10s
           --health-timeout 5s
