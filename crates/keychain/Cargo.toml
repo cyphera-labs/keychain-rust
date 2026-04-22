@@ -1,5 +1,5 @@
 [package]
-name = "keychain"
+name = "cyphera-keychain"
 description = "Universal key resolution — one API, every key store"
 version.workspace = true
 edition.workspace = true

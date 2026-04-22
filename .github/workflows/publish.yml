@@ -5,11 +5,11 @@ on:
     tags: ['v*']
 
 jobs:
-  test:
+  publish:
+    name: Publish to crates.io
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - name: Build
-        run: cargo build --workspace
-      - name: Test
-        run: cargo test --workspace
+      - uses: dtolnay/rust-toolchain@stable
+      - run: cargo test
+      - run: cargo publish --token ${{ secrets.CRATES_IO_TOKEN }}

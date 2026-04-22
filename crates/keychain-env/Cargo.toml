@@ -1,5 +1,5 @@
 [package]
-name = "keychain-env"
+name = "cyphera-keychain-env"
 description = "Environment variable backend for keychain"
 version.workspace = true
 edition.workspace = true

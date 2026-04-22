@@ -1,5 +1,5 @@
 [package]
-name = "keychain-vault"
+name = "cyphera-keychain-vault"
 description = "HashiCorp Vault backend for keychain"
 version.workspace = true
 edition.workspace = true

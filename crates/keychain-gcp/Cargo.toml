@@ -1,5 +1,5 @@
 [package]
-name = "keychain-gcp"
+name = "cyphera-keychain-gcp"
 description = "GCP Cloud KMS backend for keychain"
 version.workspace = true
 edition.workspace = true

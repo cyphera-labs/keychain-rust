@@ -1,5 +1,5 @@
 [package]
-name = "keychain-aws"
+name = "cyphera-keychain-aws"
 description = "AWS KMS backend for keychain"
 version.workspace = true
 edition.workspace = true

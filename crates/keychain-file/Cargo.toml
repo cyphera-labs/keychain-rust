@@ -1,5 +1,5 @@
 [package]
-name = "keychain-file"
+name = "cyphera-keychain-file"
 description = "File-based backend for keychain"
 version.workspace = true
 edition.workspace = true
