@@ -1,4 +1,4 @@
-use keychain::{KeyBackend, KeychainError, ResolvedKey};
+use crate::{KeyBackend, KeychainError, ResolvedKey};
 use serde::Deserialize;
 use std::collections::HashMap;
 

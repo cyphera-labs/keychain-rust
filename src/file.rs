@@ -1,4 +1,4 @@
-use keychain::{KeyBackend, KeychainError, ResolvedKey, decode_key};
+use crate::{KeyBackend, KeychainError, ResolvedKey, decode_key};
 use std::collections::HashMap;
 
 /// Resolves keys from files on disk.

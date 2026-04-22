@@ -12,8 +12,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - run: cargo build --workspace
-      - run: cargo test --workspace
+      - run: cargo build --all-features
+      - run: cargo test --all-features
 
   integration:
     name: Integration Tests
@@ -52,7 +52,7 @@ jobs:
             -H "X-Vault-Token: root" \
             -H "Content-Type: application/json" \
             -d '{"data":{"material":"2B7E151628AED2A6ABF7158809CF4F3C","version":1,"status":"active"}}'
-      - run: cargo test --workspace
+      - run: cargo test --all-features
         env:
           VAULT_ADDR: http://localhost:8200
           VAULT_TOKEN: root

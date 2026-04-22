@@ -1,4 +1,4 @@
-use keychain::{KeyBackend, KeychainError, ResolvedKey, decode_key};
+use crate::{KeyBackend, KeychainError, ResolvedKey, decode_key};
 use serde::Deserialize;
 
 /// HashiCorp Vault KV v2 backend for keychain.

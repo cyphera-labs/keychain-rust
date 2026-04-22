@@ -1,26 +1,23 @@
-[workspace]
-resolver = "2"
-members = [
-    "crates/keychain",
-    "crates/keychain-env",
-    "crates/keychain-file",
-    "crates/keychain-aws",
-    "crates/keychain-gcp",
-    "crates/keychain-azure",
-    "crates/keychain-vault",
-]
-
-[workspace.package]
+[package]
+name = "cyphera-keychain"
+description = "Universal key resolution — one API, every key store"
 version = "0.0.1-alpha.1"
 edition = "2021"
 license = "Apache-2.0"
 repository = "https://github.com/cyphera-labs/keychain"
 
-[workspace.dependencies]
+[features]
+aws = ["dep:ureq", "dep:serde", "dep:serde_json", "dep:rand"]
+gcp = ["dep:ureq", "dep:serde", "dep:serde_json", "dep:rand"]
+azure = ["dep:ureq", "dep:serde", "dep:serde_json", "dep:rand"]
+vault = ["dep:ureq", "dep:serde", "dep:serde_json"]
+all = ["aws", "gcp", "azure", "vault"]
+
+[dependencies]
 thiserror = "2"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
 hex = "0.4"
 base64 = "0.22"
-tokio = { version = "1", features = ["full"] }
-async-trait = "0.1"
+serde = { version = "1.0", features = ["derive"], optional = true }
+serde_json = { version = "1.0", optional = true }
+ureq = { version = "3", features = ["json"], optional = true }
+rand = { version = "0.8", optional = true }

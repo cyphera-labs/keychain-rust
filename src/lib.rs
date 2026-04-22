@@ -246,6 +246,23 @@ pub fn decode_key(data: &[u8], hint: Option<&str>) -> Result<Vec<u8>, KeychainEr
     }
 }
 
+// ── Module declarations ─────────────────────────────────────────────────
+
+pub mod env;
+pub mod file;
+
+#[cfg(feature = "aws")]
+pub mod aws;
+
+#[cfg(feature = "gcp")]
+pub mod gcp;
+
+#[cfg(feature = "azure")]
+pub mod azure;
+
+#[cfg(feature = "vault")]
+pub mod vault;
+
 #[cfg(test)]
 mod tests {
     use super::*;
