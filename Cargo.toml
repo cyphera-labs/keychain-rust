@@ -16,7 +16,7 @@ all = ["aws", "gcp", "azure", "vault"]
 [dependencies]
 thiserror = "2"
 hex = "0.4"
-base64 = "0.22"
+base64 = "0.23"
 serde = { version = "1.0", features = ["derive"], optional = true }
 serde_json = { version = "1.0", optional = true }
 ureq = { version = "3", features = ["json"], optional = true }
