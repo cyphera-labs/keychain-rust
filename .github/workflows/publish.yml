@@ -17,3 +17,26 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: cargo test
       - run: cargo publish
+
+  sbom:
+    name: SBOM
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: taiki-e/install-action@3f74d7c16a4242f1c95561e98edc25d36adb4375 # v2.87.12
+        with:
+          tool: cargo-cyclonedx@0.5.9
+      - run: cargo cyclonedx --format json --all-features --override-filename "cyphera-keychain-${REF_NAME}-sbom.cyclonedx"
+        env:
+          REF_NAME: ${{ github.ref_name }}
+      - uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        with:
+          path: .
+          format: spdx-json
+          output-file: cyphera-keychain-${{ github.ref_name }}-sbom.spdx.json
+          upload-artifact: false
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: sbom
+          path: cyphera-keychain-*-sbom.*.json
